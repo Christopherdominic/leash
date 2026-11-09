@@ -18,7 +18,7 @@ AI agents are learning to buy things for us. The scary part is handing one your 
 ## How it works
 
 ```
- You: "buy oat milk, an air fryer and red wine"
+ You: "buy dish soap, an air fryer and red wine"
         │
         ▼
  ┌──────────────┐   search_products   ┌─────────────────────┐

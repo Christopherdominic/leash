@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_POLICY, evaluate, evaluateForApprovedPurchase, sanitizePolicy, spendSnapshot } from "../lib/policy";
+import { DEFAULT_POLICY, categoryMatches, evaluate, evaluateForApprovedPurchase, sanitizePolicy, spendSnapshot } from "../lib/policy";
 import type { Product, Purchase } from "../lib/types";
 
 const product = (over: Partial<Product> = {}): Product => ({
@@ -55,7 +55,7 @@ describe("rules engine", () => {
   });
 
   it("human approval converts ASK into ALLOW but never overrides a BLOCK", () => {
-    const big = product({ price: 89.99, categories: ["home"] });
+    const big = product({ price: 89.99, categories: ["kitchen appliances"] });
     expect(evaluateForApprovedPurchase(DEFAULT_POLICY, big, none).outcome).toBe("ALLOW");
     expect(evaluateForApprovedPurchase({ ...DEFAULT_POLICY, paused: true }, big, none).outcome).toBe("BLOCK");
   });
@@ -84,5 +84,21 @@ describe("rules engine", () => {
     expect(p.monthlyBudget).toBe(DEFAULT_POLICY.monthlyBudget);
     expect(p.autoApproveLimit).toBe(50);
     expect(p.allowedCategories).toEqual(["book"]);
+  });
+});
+
+describe("categoryMatches", () => {
+  it("matches whole words and plurals only", () => {
+    expect(categoryMatches("print books", "book")).toBe(true);
+    expect(categoryMatches("kitchen & dining", "kitchen")).toBe(true);
+    expect(categoryMatches("household supplies", "household")).toBe(true);
+    expect(categoryMatches("home & garden", "home")).toBe(true);
+    expect(categoryMatches("party supplies", "art")).toBe(false);
+    expect(categoryMatches("bookends", "book")).toBe(false);
+  });
+
+  it("does not let decor in 'home & garden' through the default rules", () => {
+    const decor = { id: "d", title: "Artificial Coffee Beans", categories: ["vase fillers", "home & garden", "decor"], price: 9, currency: "USD" };
+    expect(evaluate(DEFAULT_POLICY, decor, { spentThisMonth: 0, purchasesToday: 0 }).outcome).toBe("BLOCK");
   });
 });

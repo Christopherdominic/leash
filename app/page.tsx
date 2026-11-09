@@ -21,7 +21,7 @@ type AppState = {
 type Turn = { role: "user" | "assistant"; content: string; steps?: AgentStep[] };
 
 const SUGGESTIONS = [
-  "Buy oat milk, eggs and coffee",
+  "Buy paper towels and dish soap",
   "I need an air fryer",
   "Get me a bottle of red wine",
   "Buy noise cancelling headphones",

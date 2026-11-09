@@ -60,9 +60,9 @@ Click **Connect PayPal wallet** → PayPal sandbox approval → back to Leash. T
 "The AI drafts my rules. I confirm. Then plain code enforces them, not the AI."
 
 **0:40 – 1:30 · The money shot**
-Type: **"Buy oat milk, coffee, an air fryer, red wine and headphones."**
+Type (or say, with the mic): **"Buy paper towels, dish soap, an air fryer, red wine and headphones."**
 Walk through the cards:
-- Oat milk and coffee: green, **paid instantly with PayPal**.
+- Paper towels and dish soap: green, **paid instantly with PayPal**.
 - Air fryer: amber, needs approval. *(Phone buzzes, if ntfy is on.)*
 - Wine: red, blocked: "matches a blocked item."
 - Headphones: red, blocked for three reasons.

@@ -14,7 +14,7 @@ export const DEFAULT_POLICY: Policy = {
   monthlyBudget: 150,
   autoApproveLimit: 25,
   hardLimit: 120,
-  allowedCategories: ["grocery", "food", "household", "home", "book", "office", "personal care", "health"],
+  allowedCategories: ["grocery", "food", "household", "kitchen", "book", "office", "personal care", "health"],
   blockedKeywords: ["alcohol", "wine", "beer", "vodka", "gift card", "tobacco", "vape", "crypto", "lottery"],
   maxPurchasesPerDay: 5,
   paused: false,
@@ -53,8 +53,7 @@ export function evaluate(policy: Policy, product: Product, spend: SpendSnapshot)
   if (hit) block.push(`Matches a blocked item: "${hit}".`);
 
   if (policy.allowedCategories.length > 0) {
-    const cats = product.categories.join(" ").toLowerCase();
-    const ok = policy.allowedCategories.some((c) => c.trim() && cats.includes(c.trim().toLowerCase()));
+    const ok = policy.allowedCategories.some((c) => c.trim() && product.categories.some((cat) => categoryMatches(cat, c)));
     if (!ok) {
       block.push(
         `Category "${product.categories[0] ?? "unknown"}" is not in your allowed list (${policy.allowedCategories.join(", ")}).`,
@@ -86,6 +85,15 @@ export function evaluate(policy: Policy, product: Product, spend: SpendSnapshot)
     outcome: "ALLOW",
     reasons: [`Within limits. ${money(round2(remaining - product.price))} left this month after this purchase.`],
   };
+}
+
+/**
+ * Whole-word match, so "book" matches "print books" but "home" doesn't sneak in
+ * through "home & garden" decor or "art" through "party supplies".
+ */
+export function categoryMatches(category: string, allowed: string): boolean {
+  const term = allowed.trim().toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z])${term}(s|es)?($|[^a-z])`).test(category.toLowerCase());
 }
 
 /** Checks a human-approved purchase again at execution time (budget may have changed). */
