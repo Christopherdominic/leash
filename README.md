@@ -11,7 +11,7 @@ AI agents are learning to buy things for us. The scary part is handing one your 
 
 ![Leash dashboard](docs/screenshot.png)
 
-**Live demo:** _add your Render URL here_ · **Video:** _add your YouTube link here_
+**Live demo:** https://leash-t86k.onrender.com · **Video:** _add your YouTube link here_
 
 ---
 
