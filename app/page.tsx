@@ -139,11 +139,20 @@ export default function Home() {
     }
   }
 
+  // One action at a time, so a double click can't approve, pay or connect twice.
+  const acting = useRef(false);
+  const [actBusy, setActBusy] = useState(false);
   async function act(fn: () => Promise<unknown>) {
+    if (acting.current) return;
+    acting.current = true;
+    setActBusy(true);
     try {
       await fn();
     } catch (e) {
       setBanner((e as Error).message);
+    } finally {
+      acting.current = false;
+      setActBusy(false);
     }
     refresh();
   }
@@ -199,7 +208,7 @@ export default function Home() {
         </div>
       )}
 
-      <main className="layout">
+      <main className={`layout${actBusy ? " acting" : ""}`}>
         <section className="col">
           <div className="card chat">
             <h2>
@@ -226,7 +235,7 @@ export default function Home() {
               )}
               {turns.map((t, i) => (
                 <div key={i} className={`msg ${t.role}`}>
-                  {t.content}
+                  {t.role === "assistant" ? <Rich text={t.content} /> : t.content}
                   {t.steps && t.steps.length > 0 && (
                     <div className="steps">
                       {t.steps.map((st, j) => (
@@ -624,4 +633,15 @@ async function toWav(blob: Blob): Promise<Blob> {
   } finally {
     ctx.close();
   }
+}
+
+/** Shows the agent's **bold** text as bold instead of raw asterisks. */
+function Rich({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+        part.startsWith("**") && part.endsWith("**") && part.length > 4 ? <strong key={i}>{part.slice(2, -2)}</strong> : part,
+      )}
+    </>
+  );
 }

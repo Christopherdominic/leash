@@ -130,3 +130,6 @@ input, textarea { font: inherit; color: inherit; }
 .integrations { display: flex; gap: 6px; flex-wrap: wrap; }
 .banner { margin: 16px 24px 0; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); font-weight: 550; }
 .err { color: var(--no); font-size: 13px; }
+
+/* While an action (approve, pay, refund, connect) is running */
+.acting .btn { cursor: progress; opacity: 0.6; }
