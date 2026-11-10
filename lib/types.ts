@@ -61,6 +61,8 @@ export type Approval = {
   status: "PENDING" | "APPROVED" | "DENIED";
   createdAt: string;
   purchaseId?: string;
+  /** The Telegram message with Approve / Deny buttons, so it can be updated once decided. */
+  telegram?: { chatId: string; messageId: number; photo: boolean };
 };
 
 export type ActivityEvent = {

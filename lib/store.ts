@@ -18,6 +18,8 @@ type State = {
   wallet: Wallet;
   /** Saved history of wallets that were disconnected, keyed by PayPal account. */
   archives: Record<string, History>;
+  /** The Telegram chat that receives approval requests (set by sending /start to the bot). */
+  telegram: { chatId?: string; name?: string };
 };
 
 type Wallet = {
@@ -42,6 +44,7 @@ function fresh(): State {
     productCache: new Map(),
     wallet: {},
     archives: {},
+    telegram: {},
   };
 }
 
@@ -53,8 +56,10 @@ export function state(): State {
 export function resetState(keepWallet = true) {
   const wallet = g.__leash?.wallet ?? {};
   const archives = g.__leash?.archives ?? {};
+  const telegram = g.__leash?.telegram ?? {};
   g.__leash = fresh();
   g.__leash.archives = archives;
+  g.__leash.telegram = telegram;
   if (keepWallet) g.__leash.wallet = wallet;
 }
 
@@ -142,6 +147,7 @@ function fromSaved(d: Partial<Saved>): State {
     policy: { ...base.policy, ...d.policy },
     wallet: { ...d.wallet },
     archives: { ...d.archives },
+    telegram: { ...d.telegram },
     productCache: new Map(d.productCache ?? []),
   } as State;
 }

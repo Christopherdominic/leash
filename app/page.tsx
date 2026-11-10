@@ -15,7 +15,13 @@ type AppState = {
   chat: ChatMessage[];
   wallet: { connected: boolean; email?: string };
   spend: { spentThisMonth: number; purchasesToday: number };
-  integrations: { paypal: "live-sandbox" | "mock"; catalog: "channel3" | "demo"; ai: string | null; phonePush: boolean };
+  integrations: {
+    paypal: "live-sandbox" | "mock";
+    catalog: "channel3" | "demo";
+    ai: string | null;
+    phonePush: boolean;
+    telegram: "linked" | "not-linked" | null;
+  };
 };
 
 type Turn = { role: "user" | "assistant"; content: string; steps?: AgentStep[] };
@@ -613,7 +619,9 @@ export default function Home() {
             <SysDot ok={Boolean(s.integrations.ai)} label={s.integrations.ai ? s.integrations.ai.replace(/^Google /, "") : "Offline agent"} />
             <SysDot ok={s.integrations.catalog === "channel3"} label={s.integrations.catalog === "channel3" ? "Channel3" : "Demo catalog"} />
             <SysDot ok={s.integrations.paypal === "live-sandbox"} label={s.integrations.paypal === "live-sandbox" ? "PayPal" : "PayPal mock"} />
-            {s.integrations.phonePush && <SysDot ok label="Phone alerts" />}
+            {s.integrations.telegram && (
+              <SysDot ok={s.integrations.telegram === "linked"} label={s.integrations.telegram === "linked" ? "Telegram" : "Telegram (send /start)"} />
+            )}
           </span>
         </div>
       </footer>

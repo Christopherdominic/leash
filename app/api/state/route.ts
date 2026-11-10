@@ -4,6 +4,7 @@ import { catalogSource } from "@/lib/catalog";
 import { paypalMode } from "@/lib/paypal";
 import { spendSnapshot } from "@/lib/policy";
 import { publicState, state, withState } from "@/lib/store";
+import { linkedChatId, telegramEnabled } from "@/lib/telegram";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,7 @@ export const GET = withState(async function GET() {
       ai: getModel()?.label ?? null,
       phonePush: Boolean(process.env.NTFY_TOPIC),
       phonePushAccount: Boolean(process.env.NTFY_TOPIC && process.env.NTFY_TOKEN),
+      telegram: telegramEnabled() ? (linkedChatId() ? "linked" : "not-linked") : null,
     },
   });
 }, { save: false });

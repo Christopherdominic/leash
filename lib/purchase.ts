@@ -2,6 +2,7 @@ import { evaluate, evaluateForApprovedPurchase, spendSnapshot } from "./policy";
 import { chargeVaultedWallet, createApprovalOrder, refundCapture } from "./paypal";
 import { notifyPhone } from "./notify";
 import { log, newId, state } from "./store";
+import { sendApprovalRequest, showApprovalOutcome } from "./telegram";
 import type { Approval, Decision, Product, Purchase } from "./types";
 
 export type PurchaseAttempt =
@@ -40,8 +41,12 @@ export async function requestPurchase(productId: string, appUrl: string): Promis
     if (!existing) {
       s.approvals.unshift(approval);
       log("approval", `Asked you to approve "${product.title}" (${fmt(product)}): ${decision.reasons.join(" ")}`);
-      const alertError = await notifyPhone(`Leash: approve ${fmt(product)}?`, `${product.title}\n${decision.reasons.join(" ")}`, appUrl);
-      if (alertError) log("error", `Phone alert failed: ${alertError}`);
+      const [ntfyError, telegramError] = await Promise.all([
+        notifyPhone(`Leash: approve ${fmt(product)}?`, `${product.title}\n${decision.reasons.join(" ")}`, appUrl),
+        sendApprovalRequest(approval, appUrl),
+      ]);
+      if (ntfyError) log("error", `Phone alert failed: ${ntfyError}`);
+      if (telegramError) log("error", `Telegram alert failed: ${telegramError}`);
     }
     return { outcome: "NEEDS_APPROVAL", approval, decision };
   }
@@ -58,6 +63,7 @@ export async function resolveApproval(approvalId: string, approve: boolean, appU
   if (!approve) {
     approval.status = "DENIED";
     log("denied", `You denied "${approval.product.title}" (${fmt(approval.product)}).`);
+    await showApprovalOutcome(approval, "✋ Denied. Nothing was bought.");
     return { approval };
   }
 
@@ -66,12 +72,21 @@ export async function resolveApproval(approvalId: string, approve: boolean, appU
   if (decision.outcome === "BLOCK") {
     approval.status = "DENIED";
     log("blocked", `Could not complete approved "${approval.product.title}": ${decision.reasons.join(" ")}`);
+    await showApprovalOutcome(approval, `⛔ Couldn't buy it: ${decision.reasons.join(" ")}`);
     return { approval, error: decision.reasons.join(" ") };
   }
   approval.status = "APPROVED";
   log("approved", `You approved "${approval.product.title}" (${fmt(approval.product)}).`);
   const result = await execute(approval.product, "human", decision, appUrl);
   if ("purchase" in result) approval.purchaseId = result.purchase.id;
+  await showApprovalOutcome(
+    approval,
+    result.outcome === "PURCHASED"
+      ? `✅ Approved and paid with PayPal (order ${result.purchase.paypalOrderId}).`
+      : result.outcome === "PENDING_PAYER"
+        ? "✅ Approved. Finish the one-time PayPal step in Leash to pay."
+        : `⚠️ Approved, but the payment failed: ${"error" in result ? result.error : "unknown error"}`,
+  );
   return { approval, result };
 }
 

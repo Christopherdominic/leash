@@ -109,7 +109,8 @@ npm run dev                  # http://localhost:3000
 | `PAYPAL_CLIENT_ID` + `PAYPAL_CLIENT_SECRET` | Real PayPal sandbox payments |
 | `GOOGLE_GENERATIVE_AI_API_KEY` (or OpenAI / Anthropic) | The real AI agent + plain-English rules |
 | `CHANNEL3_API_KEY` | Real product catalog |
-| `NTFY_TOPIC` | Phone notifications for approvals |
+| `TELEGRAM_BOT_TOKEN` | Approve or deny purchases from Telegram, with buttons |
+| `NTFY_TOPIC` | Simple phone notifications for approvals (ntfy) |
 | `DATABASE_URL` | Saves everything to Postgres so it survives restarts |
 
 The badges at the top of the chat panel show which mode each part is in.
@@ -119,6 +120,17 @@ The badges at the top of the chat panel show which mode each part is in.
 1. Go to [developer.paypal.com](https://developer.paypal.com) → **Apps & Credentials** → **Sandbox** → **Create App**. Copy the Client ID and Secret.
 2. In the app's settings, make sure **Vault / Save payment methods** is enabled. (Without it, Leash still works using the one-time approval fallback.)
 3. Under **Testing Tools → Sandbox Accounts**, use the default *personal* account to log in when you click **Connect PayPal wallet**.
+
+### Telegram approvals
+
+1. In Telegram, message **@BotFather** → `/newbot` → pick a name. Copy the bot token into `TELEGRAM_BOT_TOKEN`.
+2. Register the webhook (once, after deploying). The secret is derived from the token:
+   ```bash
+   SECRET=$(printf 'leash-webhook:%s' "$TELEGRAM_BOT_TOKEN" | sha256sum | cut -c1-32)
+   curl "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook" \
+     -d url=https://YOUR-APP.onrender.com/api/telegram -d secret_token=$SECRET
+   ```
+3. Open your bot in Telegram and send `/start`. That chat is now the only one that can approve purchases (`/stop` unlinks).
 
 ### Tests
 
