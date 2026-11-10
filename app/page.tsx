@@ -51,12 +51,57 @@ export default function Home() {
   const [voice, setVoice] = useState<"idle" | "recording" | "transcribing">("idle");
   const recorderRef = useRef<MediaRecorder | null>(null);
 
+  function startBrowserSpeech(): boolean {
+    const w = window as unknown as { SpeechRecognition?: SpeechRecCtor; webkitSpeechRecognition?: SpeechRecCtor };
+    const Ctor = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!Ctor) return false;
+    const rec = new Ctor();
+    rec.lang = "en-NG";
+    rec.continuous = true;
+    rec.interimResults = true;
+    const before = input.trim();
+    let finalText = "";
+    let failed = false;
+    rec.onresult = (e) => {
+      let interim = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) finalText += r[0].transcript;
+        else interim += r[0].transcript;
+      }
+      setInput([before, (finalText + interim).trim()].filter(Boolean).join(" "));
+    };
+    rec.onerror = (e) => {
+      if (e.error === "no-speech" || e.error === "aborted") return;
+      failed = true;
+      setBanner(
+        e.error === "not-allowed"
+          ? "Microphone access was blocked. Allow it in your browser to use voice input."
+          : `Voice input error (${e.error}). Try again.`,
+      );
+    };
+    rec.onend = () => {
+      speechRef.current = null;
+      setVoice("idle");
+      if (!failed) setInput([before, finalText.trim()].filter(Boolean).join(" "));
+    };
+    speechRef.current = rec;
+    rec.start();
+    setVoice("recording");
+    return true;
+  }
+
   // Record from the mic, send the clip to /api/transcribe, and put the words in the input so you can check them before sending.
+  const speechRef = useRef<SpeechRec | null>(null);
+
   async function toggleVoice() {
     if (voice === "recording") {
+      speechRef.current?.stop();
       recorderRef.current?.stop();
       return;
     }
+    // Chrome and Edge: use the browser's own speech recognition (live words, Nigerian English).
+    if (startBrowserSpeech()) return;
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setBanner("Voice input isn't supported in this browser.");
       return;
@@ -654,3 +699,17 @@ function Rich({ text }: { text: string }) {
     </>
   );
 }
+
+// Minimal types for the browser's speech recognition (Chrome/Edge/Safari).
+type SpeechRecResult = { isFinal: boolean; 0: { transcript: string } };
+type SpeechRec = {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  start(): void;
+  stop(): void;
+  onresult: ((e: { resultIndex: number; results: ArrayLike<SpeechRecResult> }) => void) | null;
+  onerror: ((e: { error: string }) => void) | null;
+  onend: (() => void) | null;
+};
+type SpeechRecCtor = new () => SpeechRec;
