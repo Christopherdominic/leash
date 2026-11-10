@@ -62,7 +62,7 @@ Prizes to target on the Devpost form: **Best Use of Agentic Commerce**, **Best U
 |---|---|
 | paper towels, dish soap | ✅ Paid instantly (under $25) |
 | air fryer | ⏸ Needs approval (~$80), phone buzzes |
-| red wine | ⛔ Blocked: "wine" is a blocked keyword |
+| red wine (or beer, alcohol) | ⛔ Blocked before the agent even searches: on your never-buy list |
 | headphones | ⛔ Blocked: electronics not allowed, over $120 |
 
 ---

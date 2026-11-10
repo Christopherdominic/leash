@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_POLICY, categoryMatches, evaluate, evaluateForApprovedPurchase, sanitizePolicy, spendSnapshot } from "../lib/policy";
+import { DEFAULT_POLICY, blockedTermsIn, categoryMatches, evaluate, evaluateForApprovedPurchase, sanitizePolicy, spendSnapshot } from "../lib/policy";
 import type { Product, Purchase } from "../lib/types";
 
 const product = (over: Partial<Product> = {}): Product => ({
@@ -100,5 +100,18 @@ describe("categoryMatches", () => {
   it("does not let decor in 'home & garden' through the default rules", () => {
     const decor = { id: "d", title: "Artificial Coffee Beans", categories: ["vase fillers", "home & garden", "decor"], price: 9, currency: "USD" };
     expect(evaluate(DEFAULT_POLICY, decor, { spentThisMonth: 0, purchasesToday: 0 }).outcome).toBe("BLOCK");
+  });
+});
+
+describe("blockedTermsIn", () => {
+  it("finds never-buy words in a request", () => {
+    expect(blockedTermsIn("buy me 2 bottles of beer", DEFAULT_POLICY)).toEqual(["beer"]);
+    expect(blockedTermsIn("Buy me alcohol", DEFAULT_POLICY)).toEqual(["alcohol"]);
+    expect(blockedTermsIn("dish soap and red wine", DEFAULT_POLICY)).toEqual(["wine"]);
+    expect(blockedTermsIn("a $50 gift card please", DEFAULT_POLICY)).toEqual(["gift card"]);
+  });
+
+  it("ignores allowed requests", () => {
+    expect(blockedTermsIn("paper towels and an air fryer", DEFAULT_POLICY)).toEqual([]);
   });
 });

@@ -676,7 +676,7 @@ function StepRow({ step }: { step: Extract<AgentStep, { type: "purchase" }> }) {
   const [tone, icon, label] = map[step.outcome] ?? ["", "dot", step.outcome];
   return (
     <div className={`step ${tone}`}>
-      <Thumb src={step.image} />
+      <Thumb src={step.image} icon={step.image ? "bag" : icon} />
       <div className="step-body">
         <div className="step-top">
           <span className="step-title" title={step.title}>
@@ -917,7 +917,7 @@ function Empty({ icon, title, text }: { icon: IconName; title: string; text: str
   );
 }
 
-function Thumb({ src }: { src?: string }) {
+function Thumb({ src, icon = "bag" }: { src?: string; icon?: IconName }) {
   const [broken, setBroken] = useState(false);
   return (
     <span className="thumb">
@@ -926,7 +926,7 @@ function Thumb({ src }: { src?: string }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} />
       ) : (
-        <Icon name="bag" />
+        <Icon name={icon} />
       )}
     </span>
   );

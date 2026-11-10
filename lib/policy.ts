@@ -96,6 +96,14 @@ export function categoryMatches(category: string, allowed: string): boolean {
   return new RegExp(`(^|[^a-z])${term}(s|es)?($|[^a-z])`).test(category.toLowerCase());
 }
 
+/**
+ * Never-buy words that appear in what the user asked for (or what the agent searches for).
+ * Lets the rules block "buy me beer" in code even when the catalog has no beer to block.
+ */
+export function blockedTermsIn(text: string, policy: Policy): string[] {
+  return policy.blockedKeywords.filter((k) => k.trim() && categoryMatches(text, k));
+}
+
 /** Checks a human-approved purchase again at execution time (budget may have changed). */
 export function evaluateForApprovedPurchase(policy: Policy, product: Product, spend: SpendSnapshot): Decision {
   const d = evaluate(policy, product, spend);

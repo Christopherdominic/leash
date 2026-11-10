@@ -2,7 +2,7 @@ import { generateText, stepCountIs, tool } from "ai";
 import { z } from "zod";
 import { getModels } from "./ai";
 import { searchProducts } from "./catalog";
-import { spendSnapshot } from "./policy";
+import { blockedTermsIn, spendSnapshot } from "./policy";
 import { requestPurchase } from "./purchase";
 import { log, state } from "./store";
 import type { Product } from "./types";
@@ -38,6 +38,20 @@ export async function runAgent(userMessage: string, appUrl: string): Promise<{ r
     return { reply, steps, model: "offline demo agent (add an AI key for the real agent)" };
   }
 
+  // Never-buy rules are checked in code before the AI does anything, so "buy me beer"
+  // is blocked even though the catalog has no beer for the rules engine to block.
+  const blockedTerms = new Set<string>();
+  const blockTerms = (terms: string[]) => {
+    for (const term of terms) {
+      if (blockedTerms.has(term)) continue;
+      blockedTerms.add(term);
+      const reason = `"${term}" is on your never-buy list, so the agent won't search for or buy it.`;
+      steps.push({ type: "purchase", title: `Request for ${term}`, amount: "", outcome: "BLOCKED", reasons: [reason] });
+      log("blocked", `Blocked a request for "${term}": it's on your never-buy list.`);
+    }
+  };
+  blockTerms(blockedTermsIn(userMessage, s.policy));
+
   const tools = {
     search_products: tool({
       description: "Search the product catalog. Returns products with id, title, brand, price and category.",
@@ -46,6 +60,11 @@ export async function runAgent(userMessage: string, appUrl: string): Promise<{ r
         maxPrice: z.number().optional().describe("Optional maximum price"),
       }),
       execute: async ({ query, maxPrice }) => {
+        const banned = blockedTermsIn(query, s.policy);
+        if (banned.length) {
+          blockTerms(banned);
+          return { blocked: true, message: `Blocked by the user's rules: ${banned.join(", ")} is on their never-buy list. Do not search for it or alternatives.` };
+        }
         const results = await searchProducts(query, maxPrice);
         results.forEach((p) => s.productCache.set(p.id, p));
         steps.push({ type: "search", query, count: results.length });
@@ -79,7 +98,9 @@ export async function runAgent(userMessage: string, appUrl: string): Promise<{ r
     try {
       const result = await generateText({
         model: picked.model,
-        system: SYSTEM,
+        system: blockedTerms.size
+          ? `${SYSTEM}\n\nAlready blocked by the user's rules before you started (do not search for these, buy them, or suggest substitutes; just mention briefly that they were blocked): ${[...blockedTerms].join(", ")}.`
+          : SYSTEM,
         messages,
         tools,
         stopWhen: stepCountIs(8),
