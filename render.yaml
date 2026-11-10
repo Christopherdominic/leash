@@ -22,6 +22,8 @@ services:
         sync: false
       - key: NTFY_TOPIC
         sync: false
+      - key: NTFY_TOKEN
+        sync: false
       - key: APP_URL
         sync: false
       - key: DATABASE_URL

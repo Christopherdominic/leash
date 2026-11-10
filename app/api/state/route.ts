@@ -16,6 +16,7 @@ export const GET = withState(async function GET() {
       catalog: catalogSource(),
       ai: getModel()?.label ?? null,
       phonePush: Boolean(process.env.NTFY_TOPIC),
+      phonePushAccount: Boolean(process.env.NTFY_TOPIC && process.env.NTFY_TOKEN),
     },
   });
 }, { save: false });
