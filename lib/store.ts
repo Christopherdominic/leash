@@ -1,10 +1,11 @@
+import { dbEnabled, loadDoc, saveDoc } from "./db";
 import { DEFAULT_POLICY } from "./policy";
 import type { ActivityEvent, Approval, ChatMessage, Policy, Product, Purchase } from "./types";
 
 /**
- * In-memory state for a single-user demo. Kept on globalThis so it survives
- * Next.js hot reloads. Swap for a database (e.g. Render Postgres) after the
- * hackathon.
+ * App state for a single user. Kept in memory on globalThis (survives Next.js
+ * hot reloads) and, when DATABASE_URL is set, saved to Postgres after every
+ * change so the wallet, rules, purchases and activity survive restarts.
  */
 type State = {
   policy: Policy;
@@ -22,7 +23,7 @@ type State = {
   };
 };
 
-const g = globalThis as unknown as { __leash?: State };
+const g = globalThis as unknown as { __leash?: State; __leashLoad?: Promise<void>; __leashLoaded?: boolean };
 
 function fresh(): State {
   return {
@@ -66,5 +67,59 @@ export function publicState() {
     activity: s.activity,
     chat: s.chat,
     wallet: { connected: Boolean(s.wallet.vaultId), email: s.wallet.email },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Persistence
+// ---------------------------------------------------------------------------
+
+type Saved = Omit<State, "productCache"> & { productCache: [string, Product][] };
+
+function toSaved(s: State): Saved {
+  // Keep the most recent products so pending approvals and the agent's picks still resolve.
+  return { ...s, productCache: [...s.productCache.entries()].slice(-300) };
+}
+
+function fromSaved(d: Partial<Saved>): State {
+  const base = fresh();
+  return {
+    ...base,
+    ...d,
+    policy: { ...base.policy, ...d.policy },
+    wallet: { ...d.wallet },
+    productCache: new Map(d.productCache ?? []),
+  } as State;
+}
+
+/** Load saved state from the database once per server process. */
+export async function ready(): Promise<void> {
+  if (!dbEnabled() || g.__leashLoaded) return;
+  g.__leashLoad ??= (async () => {
+    const doc = await loadDoc();
+    if (doc) g.__leash = fromSaved(doc as Partial<Saved>);
+    g.__leashLoaded = true;
+  })().catch((e) => {
+    g.__leashLoad = undefined; // try again on the next request
+    throw e;
+  });
+  await g.__leashLoad;
+}
+
+/** Save state. Never saves before a successful load, so a DB hiccup can't wipe real data. */
+export async function persist(): Promise<void> {
+  if (!dbEnabled() || !g.__leashLoaded) return;
+  await saveDoc(toSaved(state()));
+}
+
+/** Wrap an API route: load state first, save it afterwards (even if the handler throws). */
+export function withState<A extends unknown[]>(handler: (...args: A) => Promise<Response>, opts: { save?: boolean } = {}) {
+  return async (...args: A): Promise<Response> => {
+    await ready();
+    try {
+      return await handler(...args);
+    } finally {
+      if (opts.save !== false) await persist().catch((e) => console.error("Leash: failed to save state", e));
+    }
   };
 }

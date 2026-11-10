@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { fail } from "@/lib/http";
 import { parseRules } from "@/lib/rules-parser";
-import { state } from "@/lib/store";
+import { state, withState } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 /** Drafts a policy from plain English. Does NOT save it; the UI shows it for review first. */
-export async function POST(req: Request) {
+export const POST = withState(async function POST(req: Request) {
   try {
     const { text } = (await req.json()) as { text?: string };
     if (!text?.trim()) return fail("Describe your rules first.");
@@ -14,4 +14,4 @@ export async function POST(req: Request) {
   } catch (e) {
     return fail(e);
   }
-}
+});

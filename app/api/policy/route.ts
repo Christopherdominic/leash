@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { fail } from "@/lib/http";
 import { sanitizePolicy } from "@/lib/policy";
-import { log, state } from "@/lib/store";
+import { log, state, withState } from "@/lib/store";
 import type { Policy } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export async function PUT(req: Request) {
+export const PUT = withState(async function PUT(req: Request) {
   try {
     const s = state();
     const before = s.policy;
@@ -20,4 +20,4 @@ export async function PUT(req: Request) {
   } catch (e) {
     return fail(e);
   }
-}
+});

@@ -110,6 +110,7 @@ npm run dev                  # http://localhost:3000
 | `GOOGLE_GENERATIVE_AI_API_KEY` (or OpenAI / Anthropic) | The real AI agent + plain-English rules |
 | `CHANNEL3_API_KEY` | Real product catalog |
 | `NTFY_TOPIC` | Phone notifications for approvals |
+| `DATABASE_URL` | Saves everything to Postgres so it survives restarts |
 
 The badges at the top of the chat panel show which mode each part is in.
 
@@ -154,7 +155,7 @@ tests/                     Vitest
 
 ## Limitations and what's next
 
-- State is in memory (single user, resets on restart). Next: Postgres on Render and multi-user auth.
+- Single user. State (wallet, rules, purchases, approvals, activity) is saved to Render Postgres when `DATABASE_URL` is set, and kept in memory otherwise. Next: multi-user accounts with auth.
 - In the sandbox, payments go to the app's own sandbox business account. In production, Leash would sit in front of real merchant checkouts (PayPal's agentic commerce rails), with the same rules engine as the gate.
 - Next: per-merchant allowlists, weekly budgets per category, family mode (a parent sets a teen's leash), and Telegram/WhatsApp approvals.
 

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { resetState } from "@/lib/store";
+import { resetState, withState } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 /** Clears purchases, approvals, chat and rules for a fresh demo run. Keeps the connected wallet. */
-export async function POST() {
+export const POST = withState(async function POST() {
   resetState(true);
   return NextResponse.json({ ok: true });
-}
+});

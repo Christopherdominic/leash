@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { appUrl, fail } from "@/lib/http";
 import { resolveApproval } from "@/lib/purchase";
+import { withState } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
+export const POST = withState(async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await ctx.params;
     const { approve } = (await req.json()) as { approve?: boolean };
@@ -12,4 +13,4 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   } catch (e) {
     return fail(e);
   }
-}
+});

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { fail } from "@/lib/http";
 import { deletePaymentToken } from "@/lib/paypal";
-import { log, state } from "@/lib/store";
+import { log, state, withState } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 /** Unclip the leash: delete the saved payment token at PayPal. */
-export async function POST() {
+export const POST = withState(async function POST() {
   try {
     const s = state();
     if (s.wallet.vaultId) await deletePaymentToken(s.wallet.vaultId);
@@ -16,4 +16,4 @@ export async function POST() {
   } catch (e) {
     return fail(e, 500);
   }
-}
+});

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import { appUrl } from "@/lib/http";
 import { captureOrder } from "@/lib/paypal";
-import { log, state } from "@/lib/store";
+import { log, state, withState } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
 /** Fallback flow: user approved a single order in PayPal; capture it. */
-export async function GET(req: Request) {
+export const GET = withState(async function GET(req: Request) {
   const base = appUrl(req);
   const url = new URL(req.url);
   const orderId = url.searchParams.get("token");
@@ -25,4 +25,4 @@ export async function GET(req: Request) {
     log("error", `Capture failed for "${purchase.title}": ${purchase.error}`);
     return NextResponse.redirect(`${base}/?paypal=error`);
   }
-}
+});
