@@ -19,11 +19,15 @@ export function getModel(): PickedModel | null {
  * Fast, light model first, then bigger backups to try when one is overloaded or slow.
  * Backups only apply to Google and only when AI_MODEL is not set.
  */
-export function getModels(): PickedModel[] {
+export function getModels(opts: { accurate?: boolean } = {}): PickedModel[] {
   const provider = (process.env.AI_PROVIDER ?? "").toLowerCase();
   if ((provider === "google" || !provider) && process.env.GOOGLE_GENERATIVE_AI_API_KEY && !process.env.AI_MODEL) {
     const google = createGoogleGenerativeAI();
-    return ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash"].map((n) => ({ model: google(n), label: `Google ${n}` }));
+    // Speech needs a stronger model; the agent's chat is fine on the light one.
+    const names = opts.accurate
+      ? ["gemini-3.5-flash", "gemini-3.8-flash", "gemini-3.5-flash-lite"]
+      : ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3.8-flash"];
+    return names.map((n) => ({ model: google(n), label: `Google ${n}` }));
   }
   const one = pickOne();
   return one ? [one] : [];

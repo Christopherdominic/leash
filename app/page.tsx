@@ -63,7 +63,9 @@ export default function Home() {
     }
     let stream: MediaStream;
     try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      });
     } catch {
       setBanner("Microphone access was blocked. Allow it in your browser to use voice input.");
       return;
@@ -622,6 +624,13 @@ async function toWav(blob: Blob): Promise<Blob> {
     src.connect(offline.destination);
     src.start();
     const pcm = (await offline.startRendering()).getChannelData(0);
+    // Normalize quiet recordings so speech is loud enough to hear clearly.
+    let peak = 0;
+    for (const v of pcm) peak = Math.max(peak, Math.abs(v));
+    if (peak > 0.01 && peak < 0.9) {
+      const gain = 0.9 / peak;
+      for (let i = 0; i < pcm.length; i++) pcm[i] *= gain;
+    }
     const out = new DataView(new ArrayBuffer(44 + pcm.length * 2));
     const str = (o: number, t: string) => [...t].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
     str(0, "RIFF"); out.setUint32(4, 36 + pcm.length * 2, true); str(8, "WAVE");

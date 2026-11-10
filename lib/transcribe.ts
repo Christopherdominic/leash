@@ -1,9 +1,14 @@
 import { generateText } from "ai";
 import { getModels } from "./ai";
 
+const PROMPT = `Transcribe this voice message. The speaker is telling an AI shopping assistant what to buy, or describing spending rules.
+Speakers may have any accent (for example Nigerian, Indian or British English); transcribe the words they mean.
+Expect product names and shopping words like: paper towels, dish soap, laundry detergent pods, toothpaste, shampoo, air fryer, rice cooker, blender, printer paper, notebook, book, headphones, red wine, gift card, budget, per month, approve, groceries, household, kitchen.
+Write prices as numbers (e.g. "$25"). Reply with only the transcribed words, no quotes or notes. If nothing is said, reply with nothing.`;
+
 /** Turn a short voice clip into text, trying each model in turn if one is busy. */
 export async function transcribe(audio: Uint8Array, mediaType: string): Promise<string> {
-  const models = getModels();
+  const models = getModels({ accurate: true });
   if (!models.length) throw new Error("Add an AI API key to use voice input.");
   let lastError: unknown;
   for (const picked of models) {
@@ -14,7 +19,7 @@ export async function transcribe(audio: Uint8Array, mediaType: string): Promise<
           {
             role: "user",
             content: [
-              { type: "text", text: "Transcribe this voice message exactly as spoken. Reply with only the words said, no quotes or notes. If nothing is said, reply with nothing." },
+              { type: "text", text: PROMPT },
               { type: "file", data: audio, mediaType },
             ],
           },
