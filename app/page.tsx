@@ -277,13 +277,9 @@ export default function Home() {
           <div className="brand">
             <Logo />
             <span className="wordmark">Leash</span>
-            {sandbox && (
-              <span className="env-badge" title="Payments use PayPal's test environment. No real money moves.">
-                Sandbox
-              </span>
-            )}
           </div>
           <div className="topbar-actions">
+            <ThemeToggle />
             <button
               className={`agent-toggle${paused ? " off" : ""}`}
               role="switch"
@@ -333,13 +329,6 @@ export default function Home() {
             <h1>Overview</h1>
             <p>Your AI shopping agent, working inside the rules you set.</p>
           </div>
-          <button
-            className="btn ghost"
-            onClick={() => act(async () => (await api("/api/reset"), setTurns([])))}
-            title="Clear purchases, approvals, chat and rules. Keeps the wallet connected."
-          >
-            <Icon name="reset" /> Reset demo
-          </button>
         </div>
 
         <section className="stats">
@@ -932,6 +921,32 @@ function Thumb({ src, icon = "bag" }: { src?: string; icon?: IconName }) {
   );
 }
 
+/**
+ * Light / dark switch. Starts from the system setting; once clicked, the choice is
+ * remembered in this browser. layout.tsx applies it before first paint (no flash).
+ */
+function ThemeToggle() {
+  const [dark, setDark] = useState<boolean | null>(null);
+  useEffect(() => {
+    const set = document.documentElement.dataset.theme;
+    setDark(set ? set === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches);
+  }, []);
+  const toggle = () => {
+    const next = !dark;
+    setDark(next);
+    document.documentElement.dataset.theme = next ? "dark" : "light";
+    try {
+      localStorage.setItem("leash.theme", next ? "dark" : "light");
+    } catch {}
+  };
+  const label = dark ? "Switch to light mode" : "Switch to dark mode";
+  return (
+    <button className="icon-btn theme-toggle" onClick={toggle} aria-label={label} title={label} disabled={dark === null}>
+      <Icon name={dark ? "sun" : "moon"} />
+    </button>
+  );
+}
+
 function SysDot({ ok, label }: { ok: boolean; label: string }) {
   return (
     <span className={`sys-item${ok ? " ok" : ""}`}>
@@ -968,7 +983,7 @@ function PayPalMark({ light = false }: { light?: boolean }) {
 
 type IconName =
   | "search" | "check" | "clock" | "ban" | "x" | "undo" | "sliders" | "wallet" | "alert" | "bot" | "mic" | "send"
-  | "bag" | "inbox" | "activity" | "logout" | "reset" | "pause" | "sparkle" | "dot";
+  | "bag" | "inbox" | "activity" | "logout" | "pause" | "sparkle" | "dot" | "sun" | "moon";
 
 const PATHS: Record<IconName, string> = {
   search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm9 16-4.3-4.3",
@@ -987,7 +1002,8 @@ const PATHS: Record<IconName, string> = {
   inbox: "M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z",
   activity: "M22 12h-4l-3 9L9 3l-3 9H2",
   logout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
-  reset: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5",
+  sun: "M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4",
+  moon: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z",
   pause: "M10 4H6v16h4zM18 4h-4v16h4z",
   sparkle: "M12 3l1.9 5.8L20 10.7l-6.1 1.9L12 18.5l-1.9-5.9L4 10.7l6.1-1.9z",
   dot: "M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2z",

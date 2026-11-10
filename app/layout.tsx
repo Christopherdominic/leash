@@ -16,9 +16,15 @@ export const viewport: Viewport = {
   ],
 };
 
+// Apply the saved light/dark choice before the page paints, so it never flashes the wrong theme.
+const themeScript = `try{var t=localStorage.getItem("leash.theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body>{children}</body>
     </html>
   );

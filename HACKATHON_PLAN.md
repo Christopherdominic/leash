@@ -51,10 +51,10 @@ Prizes to target on the Devpost form: **Best Use of Agentic Commerce**, **Best U
 
 1. **Wake the app.** Render's free plan sleeps after 15 minutes and forgets everything. Open https://leash-t86k.onrender.com and wait for it to load.
 2. **Reconnect PayPal** (incognito window, US Personal sandbox account).
-3. Click **Reset demo** so the chat, purchases and budget are clean.
+3. Clear the demo data so the chat, purchases and budget are clean: ask Claude to reset it, or run `curl -X POST https://leash-t86k.onrender.com/api/reset` (keeps the wallet connected).
 4. **Phone:** ntfy app open, subscribed to your topic, sound on, phone where the camera or screen recorder can show it (or hold it up to the webcam).
 5. Browser zoom ~110% so text is readable on YouTube. Close other tabs. Turn off notifications from other apps.
-6. Do one full practice run, then **Reset demo** again before the real take.
+6. Do one full practice run, then reset again (step 3) before the real take.
 
 **Use these items.** Channel3 has household, kitchen, books, office and personal care, but **no groceries**. Don't say "oat milk" or "coffee" on camera.
 
