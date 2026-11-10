@@ -40,7 +40,8 @@ export async function requestPurchase(productId: string, appUrl: string): Promis
     if (!existing) {
       s.approvals.unshift(approval);
       log("approval", `Asked you to approve "${product.title}" (${fmt(product)}): ${decision.reasons.join(" ")}`);
-      void notifyPhone(`Leash: approve ${fmt(product)}?`, `${product.title}\n${decision.reasons.join(" ")}`, appUrl);
+      const alertError = await notifyPhone(`Leash: approve ${fmt(product)}?`, `${product.title}\n${decision.reasons.join(" ")}`, appUrl);
+      if (alertError) log("error", `Phone alert failed: ${alertError}`);
     }
     return { outcome: "NEEDS_APPROVAL", approval, decision };
   }
