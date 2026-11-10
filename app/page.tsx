@@ -71,18 +71,35 @@ export default function Home() {
       }
       setInput([before, (finalText + interim).trim()].filter(Boolean).join(" "));
     };
+    let heard = false;
     rec.onerror = (e) => {
       if (e.error === "no-speech" || e.error === "aborted") return;
       failed = true;
-      setBanner(
-        e.error === "not-allowed"
-          ? "Microphone access was blocked. Allow it in your browser to use voice input."
-          : `Voice input error (${e.error}). Try again.`,
-      );
+      if (e.error === "not-allowed") {
+        setBanner("Microphone access was blocked. Allow it in your browser to use voice input.");
+        return;
+      }
+      // network, service-not-allowed, language-not-supported…: switch to recording for good.
+      speechBroken.current = true;
+    };
+    const onresult = rec.onresult;
+    rec.onresult = (e) => {
+      heard = true;
+      onresult?.(e);
     };
     rec.onend = () => {
       speechRef.current = null;
       setVoice("idle");
+      if (!heard && !(failed && !speechBroken.current)) {
+        // Browser speech gave nothing (often it silently can't reach Google on Linux):
+        // use the record-and-transcribe mic from now on.
+        speechBroken.current = true;
+        try {
+          localStorage.setItem("leash.voiceBackup", "1");
+        } catch {}
+        setBanner("Switched to backup voice mode. Tap the mic and speak again.");
+        return;
+      }
       if (!failed) setInput([before, finalText.trim()].filter(Boolean).join(" "));
     };
     speechRef.current = rec;
@@ -93,6 +110,12 @@ export default function Home() {
 
   // Record from the mic, send the clip to /api/transcribe, and put the words in the input so you can check them before sending.
   const speechRef = useRef<SpeechRec | null>(null);
+  const speechBroken = useRef(false);
+  useEffect(() => {
+    try {
+      speechBroken.current = localStorage.getItem("leash.voiceBackup") === "1";
+    } catch {}
+  }, []);
 
   async function toggleVoice() {
     if (voice === "recording") {
@@ -100,8 +123,13 @@ export default function Home() {
       recorderRef.current?.stop();
       return;
     }
-    // Chrome and Edge: use the browser's own speech recognition (live words, Nigerian English).
-    if (startBrowserSpeech()) return;
+    // Chrome and Edge: try the browser's own speech recognition (live words, Nigerian English).
+    // On Linux it often can't reach Google's speech service, so fall back to recording.
+    if (!speechBroken.current && startBrowserSpeech()) return;
+    await startRecording();
+  }
+
+  async function startRecording() {
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setBanner("Voice input isn't supported in this browser.");
       return;
