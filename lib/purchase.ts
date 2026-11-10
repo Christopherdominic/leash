@@ -80,6 +80,8 @@ async function execute(product: Product, approvedBy: Purchase["approvedBy"], dec
     id: newId("pur"),
     productId: product.id,
     title: product.title,
+    image: product.image,
+    merchant: product.merchant,
     amount: product.price,
     currency: product.currency,
     status: "FAILED",

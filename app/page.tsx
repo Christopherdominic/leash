@@ -5,7 +5,7 @@ import type { ActivityEvent, Approval, ChatMessage, Policy, Purchase } from "@/l
 
 type AgentStep =
   | { type: "search"; query: string; count: number }
-  | { type: "purchase"; title: string; amount: string; outcome: string; reasons: string[] };
+  | { type: "purchase"; title: string; amount: string; outcome: string; reasons: string[]; image?: string; merchant?: string };
 
 type AppState = {
   policy: Policy;
@@ -25,7 +25,6 @@ const SUGGESTIONS = [
   "I need an air fryer",
   "Get me a bottle of red wine",
   "Buy noise cancelling headphones",
-  "Order paper towels and laundry pods",
 ];
 
 async function api<T>(path: string, body?: unknown, method = "POST"): Promise<T> {
@@ -50,6 +49,13 @@ export default function Home() {
   const endRef = useRef<HTMLDivElement>(null);
   const [voice, setVoice] = useState<"idle" | "recording" | "transcribing">("idle");
   const recorderRef = useRef<MediaRecorder | null>(null);
+
+  // Toasts disappear on their own after a few seconds.
+  useEffect(() => {
+    if (!banner) return;
+    const t = setTimeout(() => setBanner(null), 7000);
+    return () => clearTimeout(t);
+  }, [banner]);
 
   function startBrowserSpeech(): boolean {
     const w = window as unknown as { SpeechRecognition?: SpeechRecCtor; webkitSpeechRecognition?: SpeechRecCtor };
@@ -171,9 +177,16 @@ export default function Home() {
     setTimeout(() => rec.state === "recording" && rec.stop(), 60_000);
   }
 
+  const hydrated = useRef(false);
   const refresh = useCallback(async () => {
     try {
-      setS(await api<AppState>("/api/state", undefined, "GET"));
+      const next = await api<AppState>("/api/state", undefined, "GET");
+      setS(next);
+      // After a page reload, bring back the earlier conversation (text only).
+      if (!hydrated.current) {
+        hydrated.current = true;
+        setTurns((t) => (t.length ? t : next.chat.map((m) => ({ role: m.role, content: m.content }))));
+      }
     } catch {}
   }, []);
 
@@ -194,8 +207,10 @@ export default function Home() {
     return () => clearInterval(t);
   }, [refresh]);
 
+  // Keep the chat scrolled to the newest message without moving the whole page.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    const box = endRef.current?.parentElement;
+    if (box) box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
   }, [turns, busy]);
 
   async function send(text: string) {
@@ -232,281 +247,451 @@ export default function Home() {
     refresh();
   }
 
-  if (!s) return <div className="empty">Loading Leash…</div>;
-
-  const pending = s.approvals.filter((a) => a.status === "PENDING");
-  const pct = Math.min(100, (s.spend.spentThisMonth / Math.max(1, s.policy.monthlyBudget)) * 100);
-
-  return (
-    <>
-      <header className="top">
-        <div className="brand">
-          <div className="logo">L</div>
-          Leash <small>your AI shops, your rules hold</small>
-        </div>
-        <div className="top-actions">
-          {s.wallet.connected ? (
-            <span className="pill ok">
-              <span className="dot" /> PayPal connected{s.wallet.email ? ` · ${s.wallet.email}` : ""}
-            </span>
-          ) : (
-            <button
-              className="btn primary"
-              onClick={() =>
-                act(async () => {
-                  const r = await api<{ approveUrl: string }>("/api/paypal/connect");
-                  window.location.href = r.approveUrl;
-                })
-              }
-            >
-              Connect PayPal wallet
-            </button>
-          )}
-          {s.wallet.connected && (
-            <button className="btn small" onClick={() => act(() => api("/api/paypal/disconnect"))}>
-              Disconnect
-            </button>
-          )}
-          <button
-            className={`switch ${s.policy.paused ? "on" : ""}`}
-            onClick={() => act(() => api("/api/policy", { ...s.policy, paused: !s.policy.paused }, "PUT"))}
-            title="Kill switch: instantly stop all agent spending"
-          >
-            {s.policy.paused ? "■ Agent paused" : "Pause agent"}
-          </button>
-        </div>
-      </header>
-
-      {banner && (
-        <div className="banner" onClick={() => setBanner(null)}>
-          {banner}
-        </div>
-      )}
-
-      <main className={`layout${actBusy ? " acting" : ""}`}>
-        <section className="col">
-          <div className="card chat">
-            <h2>
-              Shopping agent
-              <span className="integrations">
-                <span className={`pill ${s.integrations.ai ? "accent" : ""}`}>{s.integrations.ai ?? "offline agent"}</span>
-                <span className={`pill ${s.integrations.catalog === "channel3" ? "accent" : ""}`}>
-                  {s.integrations.catalog === "channel3" ? "Channel3 catalog" : "demo catalog"}
-                </span>
-                <span className={`pill ${s.integrations.paypal === "live-sandbox" ? "accent" : ""}`}>
-                  {s.integrations.paypal === "live-sandbox" ? "PayPal sandbox" : "PayPal mock"}
-                </span>
-              </span>
-            </h2>
-            <div className="messages">
-              {turns.length === 0 && (
-                <div className="empty">
-                  <div className="big">🦮</div>
-                  <p>
-                    Tell the agent what you need. It searches, picks, and pays with PayPal, but every purchase goes through your
-                    rules first. Small and allowed → bought. Big → you approve. Forbidden → blocked.
-                  </p>
-                </div>
-              )}
-              {turns.map((t, i) => (
-                <div key={i} className={`msg ${t.role}`}>
-                  {t.role === "assistant" ? <Rich text={t.content} /> : t.content}
-                  {t.steps && t.steps.length > 0 && (
-                    <div className="steps">
-                      {t.steps.map((st, j) => (
-                        <StepRow key={j} step={st} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-              {busy && <div className="msg assistant muted">Agent is shopping…</div>}
-              <div ref={endRef} />
-            </div>
-            {turns.length === 0 && (
-              <div className="suggest">
-                {SUGGESTIONS.map((x) => (
-                  <button key={x} onClick={() => send(x)}>
-                    {x}
-                  </button>
-                ))}
-              </div>
-            )}
-            <form
-              className="composer"
-              onSubmit={(e) => {
-                e.preventDefault();
-                send(input);
-              }}
-            >
-              <input
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={voice === "recording" ? "Listening… tap the mic to stop" : voice === "transcribing" ? "Transcribing…" : "e.g. Restock my groceries for the week"}
-              />
-              <button
-                type="button"
-                className={`btn mic ${voice === "recording" ? "recording" : ""}`}
-                onClick={toggleVoice}
-                disabled={busy || voice === "transcribing"}
-                aria-label={voice === "recording" ? "Stop recording" : "Speak your request"}
-                title={voice === "recording" ? "Stop recording" : "Speak your request"}
-              >
-                <MicIcon />
-              </button>
-              <button className="btn dark" disabled={busy || !input.trim()}>
-                Send
-              </button>
-            </form>
-          </div>
-
-          <div className="card">
-            <h2>Purchases</h2>
-            {s.purchases.length === 0 ? (
-              <p className="muted">Nothing bought yet.</p>
-            ) : (
-              <div className="list">
-                {s.purchases.map((p) => (
-                  <div className="item" key={p.id}>
-                    <div className="t">
-                      <div>{p.title}</div>
-                      <div className="sub">
-                        {p.paypalOrderId ?? "no order"} · {p.approvedBy === "human" ? "approved by you" : "auto-approved"}
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                      <StatusPill p={p} />
-                      <span className="amount">{money(p.amount, p.currency)}</span>
-                      {p.status === "PENDING_PAYER" && p.payerActionUrl && (
-                        <a className="btn small primary" href={p.payerActionUrl}>
-                          Approve in PayPal
-                        </a>
-                      )}
-                      {p.status === "COMPLETED" && (
-                        <button className="btn small" onClick={() => act(() => api(`/api/purchases/${p.id}/refund`))}>
-                          Refund
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-
-        <aside className="col">
-          <div className="card">
-            <h2>
-              Monthly budget
-              <button className="btn small" onClick={() => act(async () => (await api("/api/reset"), setTurns([])))}>
-                Reset demo
-              </button>
-            </h2>
-            <div className="budget-num">
-              {money(s.spend.spentThisMonth, s.policy.currency)} <span>of {money(s.policy.monthlyBudget, s.policy.currency)}</span>
-            </div>
-            <div className="meter">
-              <div className={pct >= 100 ? "full" : pct >= 75 ? "warn" : ""} style={{ width: `${pct}%` }} />
-            </div>
-            <div className="meta">
-              <span>
-                {s.spend.purchasesToday}/{s.policy.maxPurchasesPerDay} purchases today
-              </span>
-              <span>Auto-approve ≤ {money(s.policy.autoApproveLimit, s.policy.currency)}</span>
-              <span>Never &gt; {money(s.policy.hardLimit, s.policy.currency)}</span>
-            </div>
-          </div>
-
-          <div className="card">
-            <h2>
-              Approval inbox {pending.length > 0 && <span className="pill ask">{pending.length} waiting</span>}
-            </h2>
-            {pending.length === 0 ? (
-              <p className="muted">Nothing waiting. Purchases over your auto-approve limit land here.</p>
-            ) : (
-              pending.map((a) => (
-                <div className="approval" key={a.id}>
-                  <div className="row">
-                    <span className="title">{a.product.title}</span>
-                    <span className="price">{money(a.product.price, a.product.currency)}</span>
-                  </div>
-                  <div className="why">{a.reasons.join(" ")}</div>
-                  <div className="actions">
-                    <button className="btn ok small" onClick={() => act(() => api(`/api/approvals/${a.id}`, { approve: true }))}>
-                      Approve & pay
-                    </button>
-                    <button className="btn no small" onClick={() => act(() => api(`/api/approvals/${a.id}`, { approve: false }))}>
-                      Deny
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          <RulesCard policy={s.policy} aiReady={Boolean(s.integrations.ai)} onSaved={refresh} />
-
-          <div className="card">
-            <h2>Activity</h2>
-            {s.activity.length === 0 ? (
-              <p className="muted">Every search, decision and payment is logged here.</p>
-            ) : (
-              <div className="list feed">
-                {s.activity.slice(0, 25).map((e) => (
-                  <div className="item" key={e.id}>
-                    <span className="ico">{ICON[e.kind]}</span>
-                    <span style={{ flex: 1 }}>{e.message}</span>
-                    <time>{new Date(e.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </aside>
-      </main>
-    </>
-  );
-}
-
-const ICON: Record<ActivityEvent["kind"], string> = {
-  search: "🔎",
-  allowed: "✅",
-  approval: "⏸️",
-  blocked: "⛔",
-  approved: "👍",
-  denied: "✋",
-  refund: "↩️",
-  policy: "📏",
-  paypal: "🅿️",
-  error: "⚠️",
-};
-
-function StepRow({ step }: { step: AgentStep }) {
-  if (step.type === "search") {
+  if (!s) {
     return (
-      <div className="step">
-        🔎 <span>
-          Searched <b>{step.query}</b> · {step.count} results
-        </span>
+      <div className="loading">
+        <Logo size={36} />
+        <span>Loading Leash…</span>
       </div>
     );
   }
-  const map: Record<string, [string, string, string]> = {
-    PURCHASED: ["ok", "✅", "Bought"],
-    NEEDS_APPROVAL: ["ask", "⏸️", "Needs your approval"],
-    PENDING_PAYER: ["ask", "🅿️", "Approve in PayPal"],
-    BLOCKED: ["no", "⛔", "Blocked by your rules"],
-    FAILED: ["no", "⚠️", "Payment failed"],
-  };
-  const [cls, ico, label] = map[step.outcome] ?? ["", "•", step.outcome];
+
+  const pending = s.approvals.filter((a) => a.status === "PENDING");
+  const pct = Math.min(100, (s.spend.spentThisMonth / Math.max(1, s.policy.monthlyBudget)) * 100);
+  const remaining = Math.max(0, s.policy.monthlyBudget - s.spend.spentThisMonth);
+  const cur = s.policy.currency;
+  const paused = s.policy.paused;
+  // PayPal only runs in its sandbox (or mocked), so no real money ever moves.
+  const sandbox = s.integrations.paypal === "live-sandbox" || s.integrations.paypal === "mock";
+
+  const connect = () =>
+    act(async () => {
+      const r = await api<{ approveUrl: string }>("/api/paypal/connect");
+      window.location.href = r.approveUrl;
+    });
+
   return (
-    <div className={`step ${cls}`}>
-      {ico}
-      <span>
-        <b>{label}:</b> {step.title} · {step.amount}
-        {step.reasons.length > 0 && <span className="why">{step.reasons.join(" ")}</span>}
-      </span>
+    <div className={`app${actBusy ? " acting" : ""}`}>
+      <header className="topbar">
+        <div className="topbar-inner">
+          <div className="brand">
+            <Logo />
+            <span className="wordmark">Leash</span>
+            {sandbox && (
+              <span className="env-badge" title="Payments use PayPal's test environment. No real money moves.">
+                Sandbox
+              </span>
+            )}
+          </div>
+          <div className="topbar-actions">
+            <button
+              className={`agent-toggle${paused ? " off" : ""}`}
+              role="switch"
+              aria-checked={!paused}
+              onClick={() => act(() => api("/api/policy", { ...s.policy, paused: !paused }, "PUT"))}
+              title="Kill switch: instantly stop all agent spending"
+            >
+              <span className="track">
+                <span className="thumb" />
+              </span>
+              <span className="label">{paused ? "Agent paused" : "Agent active"}</span>
+            </button>
+            {s.wallet.connected ? (
+              <div className="wallet">
+                <PayPalMark />
+                <div className="wallet-text">
+                  <span className="wallet-title">PayPal connected</span>
+                  {s.wallet.email && <span className="wallet-email">{s.wallet.email}</span>}
+                </div>
+                <button
+                  className="icon-btn"
+                  onClick={() => act(() => api("/api/paypal/disconnect"))}
+                  title="Disconnect wallet (revokes the agent's access at PayPal)"
+                  aria-label="Disconnect PayPal wallet"
+                >
+                  <Icon name="logout" />
+                </button>
+              </div>
+            ) : (
+              <button className="btn primary" onClick={connect}>
+                <PayPalMark light /> Connect<span className="hide-sm"> PayPal</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      {paused && (
+        <div className="paused-bar">
+          <Icon name="pause" /> Agent spending is paused. Nothing can be bought until you turn the agent back on.
+        </div>
+      )}
+
+      <main className="page">
+        <div className="page-head">
+          <div>
+            <h1>Overview</h1>
+            <p>Your AI shopping agent, working inside the rules you set.</p>
+          </div>
+          <button
+            className="btn ghost"
+            onClick={() => act(async () => (await api("/api/reset"), setTurns([])))}
+            title="Clear purchases, approvals, chat and rules. Keeps the wallet connected."
+          >
+            <Icon name="reset" /> Reset demo
+          </button>
+        </div>
+
+        <section className="stats">
+          <div className="stat">
+            <span className="stat-label">Spent this month</span>
+            <span className="stat-value">{money(s.spend.spentThisMonth, cur)}</span>
+            <div className="meter" aria-hidden="true">
+              <div className={pct >= 100 ? "full" : pct >= 75 ? "warn" : ""} style={{ width: `${pct}%` }} />
+            </div>
+            <span className="stat-sub">of {money(s.policy.monthlyBudget, cur)} monthly budget</span>
+          </div>
+          <div className="stat">
+            <span className="stat-label">Remaining</span>
+            <span className="stat-value">{money(remaining, cur)}</span>
+            <span className="stat-sub">Auto-pays up to {money(s.policy.autoApproveLimit, cur)} per item</span>
+          </div>
+          <div className={`stat${pending.length ? " attention" : ""}`}>
+            <span className="stat-label">Waiting for approval</span>
+            <span className="stat-value">{pending.length}</span>
+            <span className="stat-sub">{pending.length ? "Review in your inbox" : "You're all caught up"}</span>
+          </div>
+          <div className="stat">
+            <span className="stat-label">Purchases today</span>
+            <span className="stat-value">
+              {s.spend.purchasesToday}
+              <small> / {s.policy.maxPurchasesPerDay}</small>
+            </span>
+            <span className="stat-sub">Never above {money(s.policy.hardLimit, cur)} per item</span>
+          </div>
+        </section>
+
+        <div className="grid">
+          <section className="col">
+            <div className="card chat">
+              <div className="card-head">
+                <div className="agent-id">
+                  <span className="agent-avatar">
+                    <Icon name="bot" />
+                  </span>
+                  <div>
+                    <h2>Shopping agent</h2>
+                    <span className={`status${paused ? " off" : ""}`}>
+                      <span className="dot" /> {paused ? "Paused" : "Ready"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="messages">
+                {turns.length === 0 && (
+                  <div className="welcome">
+                    <h3>What do you need?</h3>
+                    <p>Ask in plain words, or tap the mic and say it. The agent finds the best match and checks your rules before paying.</p>
+                    <ul className="legend">
+                      <li>
+                        <span className="legend-ico ok">
+                          <Icon name="check" />
+                        </span>
+                        <span>
+                          <b>Pays instantly</b> when it&apos;s small and allowed
+                        </span>
+                      </li>
+                      <li>
+                        <span className="legend-ico ask">
+                          <Icon name="clock" />
+                        </span>
+                        <span>
+                          <b>Asks you first</b> above {money(s.policy.autoApproveLimit, cur)}
+                        </span>
+                      </li>
+                      <li>
+                        <span className="legend-ico no">
+                          <Icon name="ban" />
+                        </span>
+                        <span>
+                          <b>Blocks</b> anything your rules forbid
+                        </span>
+                      </li>
+                    </ul>
+                    <div className="suggest">
+                      {SUGGESTIONS.map((x) => (
+                        <button key={x} onClick={() => send(x)} disabled={busy}>
+                          {x}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {turns.map((t, i) =>
+                  t.role === "user" ? (
+                    <div key={i} className="msg user">
+                      {t.content}
+                    </div>
+                  ) : (
+                    <div key={i} className="msg-row">
+                      <span className="agent-avatar sm">
+                        <Icon name="bot" />
+                      </span>
+                      <div className="msg assistant">
+                        <div className="msg-text">
+                          <Rich text={t.content} />
+                        </div>
+                        {t.steps && t.steps.length > 0 && (
+                          <div className="steps">
+                            <Searches steps={t.steps} />
+                            {t.steps.map((st, j) => (st.type === "purchase" ? <StepRow key={j} step={st} /> : null))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ),
+                )}
+                {busy && (
+                  <div className="msg-row">
+                    <span className="agent-avatar sm">
+                      <Icon name="bot" />
+                    </span>
+                    <div className="msg assistant thinking">
+                      <span className="typing" aria-hidden="true">
+                        <i />
+                        <i />
+                        <i />
+                      </span>
+                      Searching and checking your rules…
+                    </div>
+                  </div>
+                )}
+                <div ref={endRef} />
+              </div>
+
+              <form
+                className={`composer${voice === "recording" ? " listening" : ""}`}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  send(input);
+                }}
+              >
+                <input
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  aria-label="Tell the agent what to buy"
+                  placeholder={
+                    voice === "recording"
+                      ? "Listening… tap the mic to stop"
+                      : voice === "transcribing"
+                        ? "Transcribing…"
+                        : "Tell the agent what to buy…"
+                  }
+                />
+                <button
+                  type="button"
+                  className={`icon-btn mic${voice === "recording" ? " recording" : ""}`}
+                  onClick={toggleVoice}
+                  disabled={busy || voice === "transcribing"}
+                  aria-label={voice === "recording" ? "Stop recording" : "Speak your request"}
+                  title={voice === "recording" ? "Stop recording" : "Speak your request"}
+                >
+                  {voice === "transcribing" ? <span className="spinner" /> : <Icon name="mic" />}
+                </button>
+                <button className="send" disabled={busy || !input.trim()} aria-label="Send">
+                  <Icon name="send" />
+                </button>
+              </form>
+            </div>
+
+            <div className="card">
+              <div className="card-head">
+                <h2>Purchases</h2>
+                {s.purchases.length > 0 && <span className="count">{s.purchases.length}</span>}
+              </div>
+              {s.purchases.length === 0 ? (
+                <Empty icon="bag" title="No purchases yet" text="Anything the agent buys shows up here with its PayPal order ID." />
+              ) : (
+                <div className="table">
+                  {s.purchases.map((p) => (
+                    <div className="tr" key={p.id}>
+                      <Thumb src={p.image} />
+                      <div className="td-main">
+                        <div className="td-title" title={p.title}>
+                          {p.title}
+                        </div>
+                        <div className="td-sub">
+                          {p.merchant ? `${p.merchant} · ` : ""}
+                          {p.approvedBy === "human" ? "Approved by you" : "Auto-approved"}
+                          {p.paypalOrderId && <span className="mono"> · {p.paypalOrderId}</span>}
+                        </div>
+                      </div>
+                      <StatusPill p={p} />
+                      <span className="amount">{money(p.amount, p.currency)}</span>
+                      <div className="td-actions">
+                        {p.status === "PENDING_PAYER" && p.payerActionUrl && (
+                          <a className="btn small primary" href={p.payerActionUrl}>
+                            Approve in PayPal
+                          </a>
+                        )}
+                        {p.status === "COMPLETED" && (
+                          <button className="btn small" onClick={() => act(() => api(`/api/purchases/${p.id}/refund`))}>
+                            Refund
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+
+          <aside className="col">
+            <div className={`card${pending.length ? " card-attention" : ""}`}>
+              <div className="card-head">
+                <h2>Approval inbox</h2>
+                {pending.length > 0 && <span className="pill ask">{pending.length} waiting</span>}
+              </div>
+              {pending.length === 0 ? (
+                <Empty icon="inbox" title="Nothing to review" text={`Purchases over ${money(s.policy.autoApproveLimit, cur)} wait here for your OK.`} />
+              ) : (
+                <div className="approvals">
+                  {pending.map((a) => (
+                    <div className="approval" key={a.id}>
+                      <div className="approval-top">
+                        <Thumb src={a.product.image} />
+                        <div className="td-main">
+                          <div className="td-title" title={a.product.title}>
+                            {a.product.title}
+                          </div>
+                          <div className="td-sub">{a.product.merchant ?? "Channel3 catalog"}</div>
+                        </div>
+                        <span className="amount lg">{money(a.product.price, a.product.currency)}</span>
+                      </div>
+                      <p className="approval-why">{a.reasons.join(" ")}</p>
+                      <div className="approval-actions">
+                        <button className="btn ok" onClick={() => act(() => api(`/api/approvals/${a.id}`, { approve: true }))}>
+                          <Icon name="check" /> Approve & pay
+                        </button>
+                        <button className="btn" onClick={() => act(() => api(`/api/approvals/${a.id}`, { approve: false }))}>
+                          Deny
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <RulesCard policy={s.policy} aiReady={Boolean(s.integrations.ai)} onSaved={refresh} />
+
+            <div className="card">
+              <div className="card-head">
+                <h2>Activity</h2>
+              </div>
+              {s.activity.length === 0 ? (
+                <Empty icon="activity" title="No activity yet" text="Every search, decision and payment is logged here." />
+              ) : (
+                <ol className="timeline">
+                  {s.activity.slice(0, 25).map((e) => {
+                    const [icon, tone] = ACTIVITY[e.kind];
+                    return (
+                      <li key={e.id}>
+                        <span className={`tl-ico ${tone}`}>
+                          <Icon name={icon} />
+                        </span>
+                        <span className="tl-text">{e.message}</span>
+                        <time dateTime={e.at}>{new Date(e.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
+            </div>
+          </aside>
+        </div>
+      </main>
+
+      <footer className="footer">
+        <div className="footer-inner">
+          <span>
+            <b>Leash</b> · Spending guardrails for AI shopping agents.
+            {sandbox && " Sandbox mode: payments use PayPal's test environment, no real money moves."}
+          </span>
+          <span className="sys">
+            <SysDot ok={Boolean(s.integrations.ai)} label={s.integrations.ai ? s.integrations.ai.replace(/^Google /, "") : "Offline agent"} />
+            <SysDot ok={s.integrations.catalog === "channel3"} label={s.integrations.catalog === "channel3" ? "Channel3" : "Demo catalog"} />
+            <SysDot ok={s.integrations.paypal === "live-sandbox"} label={s.integrations.paypal === "live-sandbox" ? "PayPal" : "PayPal mock"} />
+            {s.integrations.phonePush && <SysDot ok label="Phone alerts" />}
+          </span>
+        </div>
+      </footer>
+
+      {banner && (
+        <div className="toast" role="status">
+          <span>{banner}</span>
+          <button className="icon-btn" onClick={() => setBanner(null)} aria-label="Dismiss">
+            <Icon name="x" />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const ACTIVITY: Record<ActivityEvent["kind"], [IconName, string]> = {
+  search: ["search", ""],
+  allowed: ["check", "ok"],
+  approval: ["clock", "ask"],
+  blocked: ["ban", "no"],
+  approved: ["check", "ok"],
+  denied: ["x", "no"],
+  refund: ["undo", ""],
+  policy: ["sliders", "accent"],
+  paypal: ["wallet", "accent"],
+  error: ["alert", "no"],
+};
+
+/** All of a reply's searches on one line: Searched "air fryer", "dish soap". */
+function Searches({ steps }: { steps: AgentStep[] }) {
+  const q = steps.flatMap((x) => (x.type === "search" ? [x.query] : []));
+  if (!q.length) return null;
+  return (
+    <div className="step-search">
+      <Icon name="search" /> Searched {q.map((x) => `“${x}”`).join(", ")}
+    </div>
+  );
+}
+
+function StepRow({ step }: { step: Extract<AgentStep, { type: "purchase" }> }) {
+  const map: Record<string, [string, IconName, string]> = {
+    PURCHASED: ["ok", "check", "Paid"],
+    NEEDS_APPROVAL: ["ask", "clock", "Needs your approval"],
+    PENDING_PAYER: ["ask", "wallet", "Approve in PayPal"],
+    BLOCKED: ["no", "ban", "Blocked"],
+    FAILED: ["no", "alert", "Payment failed"],
+  };
+  const [tone, icon, label] = map[step.outcome] ?? ["", "dot", step.outcome];
+  return (
+    <div className={`step ${tone}`}>
+      <Thumb src={step.image} />
+      <div className="step-body">
+        <div className="step-top">
+          <span className="step-title" title={step.title}>
+            {step.title}
+          </span>
+          <span className="amount">{step.amount.replace(/^USD /, "$")}</span>
+        </div>
+        <div className="step-meta">
+          <span className={`pill ${tone}`}>
+            <Icon name={icon} /> {label}
+          </span>
+          {step.merchant && <span className="td-sub">{step.merchant}</span>}
+        </div>
+        {step.reasons.length > 0 && <p className="step-why">{step.reasons.join(" ")}</p>}
+      </div>
     </div>
   );
 }
@@ -549,6 +734,7 @@ function RulesCard({ policy, aiReady, onSaved }: { policy: Policy; aiReady: bool
       await api("/api/policy", { ...policy, ...p }, "PUT");
       setDirty(false);
       setDraft(null);
+      setNl("");
       onSaved();
     } catch (e) {
       setErr((e as Error).message);
@@ -567,36 +753,71 @@ function RulesCard({ policy, aiReady, onSaved }: { policy: Policy; aiReady: bool
     }
   }
 
+  const cur = policy.currency === "USD" ? "$" : policy.currency;
+
   return (
     <div className="card">
-      <h2>Spending rules</h2>
+      <div className="card-head">
+        <h2>Spending rules</h2>
+        <span className="hint">Enforced by code, not the AI</span>
+      </div>
+
       <div className="nl">
+        <label className="field-label" htmlFor="nl-rules">
+          Describe your rules
+        </label>
         <textarea
+          id="nl-rules"
           value={nl}
           onChange={(e) => setNl(e.target.value)}
-          placeholder={'Write rules in plain English, e.g. "$100 a month, groceries and household only, ask me for anything over $20, never alcohol or gift cards, max 3 orders a day"'}
+          placeholder={'e.g. "$100 a month, household and kitchen only, ask me over $20, never alcohol or gift cards"'}
         />
         <div className="nl-row">
-          <span className="muted">{aiReady ? "AI drafts the rules, you confirm, code enforces." : "Add an AI key to use plain-English rules."}</span>
+          <span className="hint">{aiReady ? "AI drafts the rules. You review them before they apply." : "Add an AI key to use plain-English rules."}</span>
           <button className="btn small dark" disabled={!aiReady || !nl.trim() || working} onClick={parse}>
-            {working ? "Reading…" : "Draft rules"}
+            {working ? (
+              <>
+                <span className="spinner" /> Reading…
+              </>
+            ) : (
+              <>
+                <Icon name="sparkle" /> Draft rules
+              </>
+            )}
           </button>
         </div>
         {draft && (
           <div className="draft">
-            <div style={{ marginBottom: 6 }}>
-              <b>Draft:</b> {draft.summary}
+            <div className="draft-title">
+              <Icon name="sparkle" /> Proposed rules
             </div>
-            <div className="sub" style={{ fontFamily: "var(--mono)", fontSize: 12, marginBottom: 8 }}>
-              ${draft.policy.monthlyBudget}/mo · auto ≤ ${draft.policy.autoApproveLimit} · never &gt; ${draft.policy.hardLimit} · {draft.policy.maxPurchasesPerDay}/day
-              <br />
-              allow: {draft.policy.allowedCategories.join(", ") || "any"}
-              <br />
-              block: {draft.policy.blockedKeywords.join(", ") || "none"}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
+            <p>{draft.summary}</p>
+            <dl className="draft-grid">
+              <dt>Monthly budget</dt>
+              <dd>
+                {cur}
+                {draft.policy.monthlyBudget}
+              </dd>
+              <dt>Auto-pay up to</dt>
+              <dd>
+                {cur}
+                {draft.policy.autoApproveLimit}
+              </dd>
+              <dt>Never above</dt>
+              <dd>
+                {cur}
+                {draft.policy.hardLimit}
+              </dd>
+              <dt>Per day</dt>
+              <dd>{draft.policy.maxPurchasesPerDay} purchases</dd>
+              <dt>Allowed</dt>
+              <dd>{draft.policy.allowedCategories.join(", ") || "Anything"}</dd>
+              <dt>Never buy</dt>
+              <dd>{draft.policy.blockedKeywords.join(", ") || "Nothing blocked"}</dd>
+            </dl>
+            <div className="row-actions">
               <button className="btn small ok" onClick={() => save(draft.policy)}>
-                Apply these rules
+                Apply rules
               </button>
               <button className="btn small" onClick={() => setDraft(null)}>
                 Discard
@@ -606,36 +827,30 @@ function RulesCard({ policy, aiReady, onSaved }: { policy: Policy; aiReady: bool
         )}
       </div>
 
+      <div className="divider">
+        <span>or edit directly</span>
+      </div>
+
       <div className="rules-grid">
-        <label className="field">
-          Monthly budget ({policy.currency})
-          <input type="number" min={0} value={form.monthlyBudget} onChange={(e) => set("monthlyBudget", e.target.value)} />
-        </label>
-        <label className="field">
-          Auto-approve up to
-          <input type="number" min={0} value={form.autoApproveLimit} onChange={(e) => set("autoApproveLimit", e.target.value)} />
-        </label>
-        <label className="field">
-          Never allow above
-          <input type="number" min={0} value={form.hardLimit} onChange={(e) => set("hardLimit", e.target.value)} />
-        </label>
-        <label className="field">
-          Max purchases / day
-          <input type="number" min={0} value={form.maxPurchasesPerDay} onChange={(e) => set("maxPurchasesPerDay", e.target.value)} />
+        <MoneyField label="Monthly budget" prefix={cur} value={form.monthlyBudget} onChange={(v) => set("monthlyBudget", v)} />
+        <MoneyField label="Auto-pay up to" prefix={cur} value={form.autoApproveLimit} onChange={(v) => set("autoApproveLimit", v)} />
+        <MoneyField label="Never allow above" prefix={cur} value={form.hardLimit} onChange={(v) => set("hardLimit", v)} />
+        <MoneyField label="Max purchases a day" value={form.maxPurchasesPerDay} onChange={(v) => set("maxPurchasesPerDay", v)} />
+        <label className="field wide">
+          <span className="field-label">Allowed categories</span>
+          <input value={form.allowedCategories} onChange={(e) => set("allowedCategories", e.target.value)} placeholder="Leave empty to allow anything" />
+          <span className="hint">Comma separated, e.g. household, kitchen, book</span>
         </label>
         <label className="field wide">
-          Allowed categories (comma separated, empty = any)
-          <input value={form.allowedCategories} onChange={(e) => set("allowedCategories", e.target.value)} />
-        </label>
-        <label className="field wide">
-          Never buy (keywords)
+          <span className="field-label">Never buy</span>
           <input value={form.blockedKeywords} onChange={(e) => set("blockedKeywords", e.target.value)} />
+          <span className="hint">Blocks any product whose name or category contains these words</span>
         </label>
       </div>
       {dirty && (
-        <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        <div className="row-actions sticky-save">
           <button className="btn small dark" onClick={() => save(fromForm(form))}>
-            Save rules
+            Save changes
           </button>
           <button
             className="btn small"
@@ -650,6 +865,18 @@ function RulesCard({ policy, aiReady, onSaved }: { policy: Policy; aiReady: bool
       )}
       {err && <p className="err">{err}</p>}
     </div>
+  );
+}
+
+function MoneyField({ label, prefix, value, onChange }: { label: string; prefix?: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="field">
+      <span className="field-label">{label}</span>
+      <span className={`input-wrap${prefix ? " has-prefix" : ""}`}>
+        {prefix && <span className="prefix">{prefix}</span>}
+        <input type="number" min={0} inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} />
+      </span>
+    </label>
   );
 }
 
@@ -676,11 +903,100 @@ function fromForm(f: ReturnType<typeof toForm>): Partial<Policy> {
   };
 }
 
-function MicIcon() {
+function Empty({ icon, title, text }: { icon: IconName; title: string; text: string }) {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <rect x="9" y="3" width="6" height="11" rx="3" />
-      <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+    <div className="empty">
+      <span className="empty-ico">
+        <Icon name={icon} />
+      </span>
+      <div>
+        <div className="empty-title">{title}</div>
+        <div className="empty-text">{text}</div>
+      </div>
+    </div>
+  );
+}
+
+function Thumb({ src }: { src?: string }) {
+  const [broken, setBroken] = useState(false);
+  return (
+    <span className="thumb">
+      {src && !broken ? (
+        // Product images come from many retailer domains, so a plain img is simplest here.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={src} alt="" loading="lazy" onError={() => setBroken(true)} />
+      ) : (
+        <Icon name="bag" />
+      )}
+    </span>
+  );
+}
+
+function SysDot({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span className={`sys-item${ok ? " ok" : ""}`}>
+      <span className="dot" /> {label}
+    </span>
+  );
+}
+
+function Logo({ size = 28 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" aria-hidden="true" className="logo">
+      <rect width="32" height="32" rx="8" fill="var(--brand)" />
+      {/* An "L" whose foot ends in a leash ring */}
+      <path d="M11.5 8v14h7" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="22.5" cy="22" r="3" fill="none" stroke="#fff" strokeWidth="2.4" />
+    </svg>
+  );
+}
+
+function PayPalMark({ light = false }: { light?: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" className="pp-mark">
+      <path
+        fill={light ? "#fff" : "#003087"}
+        d="M8.3 21.2H4.6a.5.5 0 0 1-.5-.6L6.8 3.4A.8.8 0 0 1 7.6 2.7h6.1c3.3 0 5.4 1.7 4.9 4.9-.6 3.9-3.1 5.6-6.6 5.6H9.9a.8.8 0 0 0-.8.7z"
+      />
+      <path
+        fill={light ? "rgba(255,255,255,.7)" : "#0070e0"}
+        d="M19.3 8.2c-.6 3.6-3 5.6-6.6 5.6h-1.7a.8.8 0 0 0-.8.7l-1 6.4-.2 1.2a.5.5 0 0 0 .5.6h3.1a.7.7 0 0 0 .7-.6l.6-3.8a.7.7 0 0 1 .7-.6h.6c3 0 5.1-1.4 5.6-4.7.3-2-.4-3.4-1.5-4.8z"
+      />
+    </svg>
+  );
+}
+
+type IconName =
+  | "search" | "check" | "clock" | "ban" | "x" | "undo" | "sliders" | "wallet" | "alert" | "bot" | "mic" | "send"
+  | "bag" | "inbox" | "activity" | "logout" | "reset" | "pause" | "sparkle" | "dot";
+
+const PATHS: Record<IconName, string> = {
+  search: "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zm9 16-4.3-4.3",
+  check: "M20 6 9 17l-5-5",
+  clock: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 4.5V12l3 2",
+  ban: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM5.6 5.6l12.8 12.8",
+  x: "M18 6 6 18M6 6l12 12",
+  undo: "M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11",
+  sliders: "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
+  wallet: "M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3v3a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5",
+  alert: "M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01",
+  bot: "M12 8V4H8M4 8h16a0 0 0 0 1 0 0v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8zM2 14h2M20 14h2M9 13v2M15 13v2",
+  mic: "M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM19 10v2a7 7 0 0 1-14 0v-2M12 19v3",
+  send: "M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z",
+  bag: "M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0",
+  inbox: "M22 12h-6l-2 3h-4l-2-3H2M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z",
+  activity: "M22 12h-4l-3 9L9 3l-3 9H2",
+  logout: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9",
+  reset: "M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5",
+  pause: "M10 4H6v16h4zM18 4h-4v16h4z",
+  sparkle: "M12 3l1.9 5.8L20 10.7l-6.1 1.9L12 18.5l-1.9-5.9L4 10.7l6.1-1.9z",
+  dot: "M12 11a1 1 0 1 0 0 2 1 1 0 0 0 0-2z",
+};
+
+function Icon({ name }: { name: IconName }) {
+  return (
+    <svg className="icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d={PATHS[name]} />
     </svg>
   );
 }
@@ -719,11 +1035,11 @@ async function toWav(blob: Blob): Promise<Blob> {
   }
 }
 
-/** Shows the agent's **bold** text as bold instead of raw asterisks. */
+/** Shows the agent's **bold** text as bold and "* item" lines as bullets, instead of raw markdown. */
 function Rich({ text }: { text: string }) {
   return (
     <>
-      {text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+      {text.replace(/^[ \t]*[*-][ \t]+/gm, "• ").split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
         part.startsWith("**") && part.endsWith("**") && part.length > 4 ? <strong key={i}>{part.slice(2, -2)}</strong> : part,
       )}
     </>

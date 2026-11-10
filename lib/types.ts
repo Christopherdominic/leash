@@ -41,6 +41,8 @@ export type Purchase = {
   id: string;
   productId: string;
   title: string;
+  image?: string;
+  merchant?: string;
   amount: number;
   currency: string;
   status: "COMPLETED" | "PENDING_PAYER" | "REFUNDED" | "FAILED";
