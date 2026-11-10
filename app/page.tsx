@@ -305,7 +305,7 @@ export default function Home() {
                 </div>
                 <button
                   className="icon-btn"
-                  onClick={() => act(() => api("/api/paypal/disconnect"))}
+                  onClick={() => act(async () => (await api("/api/paypal/disconnect"), setTurns([])))}
                   title="Disconnect wallet (revokes the agent's access at PayPal)"
                   aria-label="Disconnect PayPal wallet"
                 >

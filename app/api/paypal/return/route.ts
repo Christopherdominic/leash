@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { appUrl } from "@/lib/http";
 import { createPaymentToken } from "@/lib/paypal";
-import { log, state, withState } from "@/lib/store";
+import { activateWallet, log, state, withState } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
@@ -14,8 +14,13 @@ export const GET = withState(async function GET(req: Request) {
   if (!setupTokenId) return NextResponse.redirect(`${base}/?paypal=missing-token`);
   try {
     const t = await createPaymentToken(setupTokenId);
-    s.wallet = { vaultId: t.vaultId, customerId: t.customerId, email: t.email };
-    log("paypal", `PayPal wallet connected${t.email ? ` (${t.email})` : ""}. The agent can now pay within your rules.`);
+    const restored = activateWallet({ vaultId: t.vaultId, customerId: t.customerId, email: t.email });
+    log(
+      "paypal",
+      restored
+        ? `Welcome back${t.email ? `, ${t.email}` : ""}. Restored your history (${restored} purchase${restored === 1 ? "" : "s"}).`
+        : `PayPal wallet connected${t.email ? ` (${t.email})` : ""}. The agent can now pay within your rules.`,
+    );
     return NextResponse.redirect(`${base}/?paypal=connected`);
   } catch (e) {
     log("error", `PayPal connection failed: ${e instanceof Error ? e.message : String(e)}`);

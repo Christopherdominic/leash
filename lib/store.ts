@@ -15,13 +15,20 @@ type State = {
   chat: ChatMessage[];
   /** Products the agent has seen, keyed by id. The agent can only buy from here. */
   productCache: Map<string, Product>;
-  wallet: {
-    vaultId?: string;
-    customerId?: string;
-    email?: string;
-    pendingSetupTokenId?: string;
-  };
+  wallet: Wallet;
+  /** Saved history of wallets that were disconnected, keyed by PayPal account. */
+  archives: Record<string, History>;
 };
+
+type Wallet = {
+  vaultId?: string;
+  customerId?: string;
+  email?: string;
+  pendingSetupTokenId?: string;
+};
+
+/** Everything that belongs to one PayPal account's history. Rules stay shared. */
+type History = Pick<State, "purchases" | "approvals" | "activity" | "chat">;
 
 const g = globalThis as unknown as { __leash?: State; __leashLoad?: Promise<void>; __leashLoaded?: boolean };
 
@@ -34,6 +41,7 @@ function fresh(): State {
     chat: [],
     productCache: new Map(),
     wallet: {},
+    archives: {},
   };
 }
 
@@ -44,8 +52,53 @@ export function state(): State {
 
 export function resetState(keepWallet = true) {
   const wallet = g.__leash?.wallet ?? {};
+  const archives = g.__leash?.archives ?? {};
   g.__leash = fresh();
+  g.__leash.archives = archives;
   if (keepWallet) g.__leash.wallet = wallet;
+}
+
+function walletKey(w: Wallet): string | undefined {
+  return (w.email ?? w.customerId)?.toLowerCase();
+}
+
+/**
+ * Disconnect: file the current history under this PayPal account and start the
+ * dashboard empty. Reconnecting the same account brings it back.
+ */
+export function archiveCurrentWallet(): string | undefined {
+  const s = state();
+  const key = walletKey(s.wallet);
+  const label = s.wallet.email;
+  if (key) {
+    s.archives[key] = { purchases: s.purchases, approvals: s.approvals, activity: s.activity, chat: s.chat };
+    s.purchases = [];
+    s.approvals = [];
+    s.activity = [];
+    s.chat = [];
+  }
+  s.wallet = {};
+  return label;
+}
+
+/**
+ * Connect: make this the active wallet. If it was connected before, its saved
+ * history comes back, merged with anything done since disconnecting.
+ * Returns how many purchases were restored (0 for a new account).
+ */
+export function activateWallet(w: Wallet): number {
+  const s = state();
+  s.wallet = w;
+  const key = walletKey(w);
+  const saved = key ? s.archives[key] : undefined;
+  if (!key || !saved) return 0;
+  delete s.archives[key];
+  const newest = <T>(at: (x: T) => string) => (a: T, b: T) => at(b).localeCompare(at(a));
+  s.purchases = [...s.purchases, ...saved.purchases].sort(newest((x) => x.createdAt));
+  s.approvals = [...s.approvals, ...saved.approvals].sort(newest((x) => x.createdAt));
+  s.activity = [...s.activity, ...saved.activity].sort(newest((x) => x.at)).slice(0, 200);
+  s.chat = [...saved.chat, ...s.chat];
+  return saved.purchases.length;
 }
 
 export function newId(prefix: string) {
@@ -88,6 +141,7 @@ function fromSaved(d: Partial<Saved>): State {
     ...d,
     policy: { ...base.policy, ...d.policy },
     wallet: { ...d.wallet },
+    archives: { ...d.archives },
     productCache: new Map(d.productCache ?? []),
   } as State;
 }
