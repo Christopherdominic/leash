@@ -697,11 +697,13 @@ async function toWav(blob: Blob): Promise<Blob> {
     src.connect(offline.destination);
     src.start();
     const pcm = (await offline.startRendering()).getChannelData(0);
-    // Normalize quiet recordings so speech is loud enough to hear clearly.
+    // Near-silent recordings make the model invent words, so refuse them.
     let peak = 0;
     for (const v of pcm) peak = Math.max(peak, Math.abs(v));
-    if (peak > 0.01 && peak < 0.9) {
-      const gain = 0.9 / peak;
+    if (peak < 0.02) throw new Error("Couldn't hear you. Check that the right microphone is selected and not muted, then try again.");
+    // Gently lift quiet recordings, but never more than 4x so background hiss isn't blown up.
+    if (peak < 0.5) {
+      const gain = Math.min(4, 0.7 / peak);
       for (let i = 0; i < pcm.length; i++) pcm[i] *= gain;
     }
     const out = new DataView(new ArrayBuffer(44 + pcm.length * 2));
