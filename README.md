@@ -9,13 +9,11 @@ AI agents are learning to buy things for us. The scary part is handing one your 
 - Forbidden → blocked, with the reason in plain words.
 - One tap pauses all agent spending (kill switch). One tap refunds.
 
-![Leash dashboard](docs/screenshot.png)
-
 | The agent shops inside your rules | Every payment and decision is logged |
 |---|---|
 | ![Agent chat: books and an air fryer paid with PayPal](docs/agent-chat.png) | ![Purchases with PayPal order ids, refund buttons and the activity log](docs/purchases-activity.png) |
 
-**Live demo:** https://leash-t86k.onrender.com · **Video:** _add your YouTube link here_
+**Live demo:** https://leash-t86k.onrender.com · **Video:** https://www.youtube.com/watch?v=acfaUUEhLRM
 
 ---
 
