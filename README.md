@@ -5,11 +5,15 @@
 AI agents are learning to buy things for us. The scary part is handing one your wallet. Leash fixes that: you connect PayPal once, write your rules in plain English, and the agent shops freely, but **every payment goes through a rules engine the AI does not control.**
 
 - Small and allowed → the agent pays instantly with your saved PayPal wallet.
-- Over your limit → it lands in your approval inbox (and buzzes your phone).
+- Over your limit → it lands in your approval inbox, and in **Telegram** with the product photo and Approve & pay / Deny buttons.
 - Forbidden → blocked, with the reason in plain words.
 - One tap pauses all agent spending (kill switch). One tap refunds.
 
 ![Leash dashboard](docs/screenshot.png)
+
+| The agent shops inside your rules | Every payment and decision is logged |
+|---|---|
+| ![Agent chat: books and an air fryer paid with PayPal](docs/agent-chat.png) | ![Purchases with PayPal order ids, refund buttons and the activity log](docs/purchases-activity.png) |
 
 **Live demo:** https://leash-t86k.onrender.com · **Video:** _add your YouTube link here_
 
@@ -36,7 +40,7 @@ AI agents are learning to buy things for us. The scary part is handing one your 
         │              │               │
         ▼              ▼               ▼
   PayPal Orders v2   Approval inbox   Reason shown
-  with vault_id      + phone push     to user & agent
+  with vault_id      + Telegram       to user & agent
   (status COMPLETED) → you approve → PayPal pays
 ```
 
@@ -169,7 +173,7 @@ tests/                     Vitest
 
 - Single user. State (wallet, rules, purchases, approvals, activity) is saved to Render Postgres when `DATABASE_URL` is set, and kept in memory otherwise. Next: multi-user accounts with auth.
 - In the sandbox, payments go to the app's own sandbox business account. In production, Leash would sit in front of real merchant checkouts (PayPal's agentic commerce rails), with the same rules engine as the gate.
-- Next: per-merchant allowlists, weekly budgets per category, family mode (a parent sets a teen's leash), and Telegram/WhatsApp approvals.
+- Next: per-merchant allowlists, weekly budgets per category, family mode (a parent sets a teen's leash), and WhatsApp approvals.
 
 ## License
 
